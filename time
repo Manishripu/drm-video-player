@@ -1,0 +1,470 @@
+// date-time-picker.component.ts
+import { Component, OnInit, Output, EventEmitter, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+
+@Component({
+  selector: 'app-date-time-picker',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './date-time-picker.component.html',
+  styleUrl: './date-time-picker.component.scss'
+})
+export class DateTimePickerComponent implements OnInit {
+  @Output() dateTimeChange = new EventEmitter<Date>();
+  
+  currentDate = signal<Date>(new Date());
+  selectedDate = signal<Date>(new Date());
+  
+  hours = signal<string[]>([]);
+  minutes = signal<string[]>([]);
+  seconds = signal<string[]>([]);
+  
+  selectedHour = signal<string>('00');
+  selectedMinute = signal<string>('00');
+  selectedSecond = signal<string>('00');
+  
+  calendarDays = signal<CalendarDay[]>([]);
+  weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  
+  ngOnInit(): void {
+    this.generateCalendar();
+    this.generateTimeOptions();
+    
+    // Set initial time values
+    const now = new Date();
+    this.selectedHour.set(now.getHours().toString().padStart(2, '0'));
+    this.selectedMinute.set(now.getMinutes().toString().padStart(2, '0'));
+    this.selectedSecond.set(now.getSeconds().toString().padStart(2, '0'));
+  }
+  
+  generateTimeOptions(): void {
+    const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
+    const minutesSeconds = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+    
+    this.hours.set(hours);
+    this.minutes.set(minutesSeconds);
+    this.seconds.set(minutesSeconds);
+  }
+  
+  generateCalendar(): void {
+    const year = this.currentDate().getFullYear();
+    const month = this.currentDate().getMonth();
+    
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+    
+    const daysInMonth = lastDayOfMonth.getDate();
+    const firstDayOfWeek = firstDayOfMonth.getDay();
+    
+    // Get days from previous month
+    const daysFromPrevMonth = firstDayOfWeek;
+    const prevMonth = new Date(year, month, 0);
+    const prevMonthDays = prevMonth.getDate();
+    
+    const days: CalendarDay[] = [];
+    
+    // Add days from previous month
+    for (let i = prevMonthDays - daysFromPrevMonth + 1; i <= prevMonthDays; i++) {
+      days.push({
+        day: i,
+        month: month - 1 < 0 ? 11 : month - 1,
+        year: month - 1 < 0 ? year - 1 : year,
+        isCurrentMonth: false,
+        isToday: false,
+        isSelected: false
+      });
+    }
+    
+    // Add days from current month
+    const today = new Date();
+    for (let i = 1; i <= daysInMonth; i++) {
+      const isToday = 
+        i === today.getDate() && 
+        month === today.getMonth() && 
+        year === today.getFullYear();
+        
+      const isSelected = 
+        i === this.selectedDate().getDate() && 
+        month === this.selectedDate().getMonth() && 
+        year === this.selectedDate().getFullYear();
+        
+      days.push({
+        day: i,
+        month,
+        year,
+        isCurrentMonth: true,
+        isToday,
+        isSelected
+      });
+    }
+    
+    // Add days from next month
+    const totalDaysAdded = days.length;
+    const daysNeeded = 42 - totalDaysAdded; // 6 rows of 7 days
+    
+    for (let i = 1; i <= daysNeeded; i++) {
+      days.push({
+        day: i,
+        month: month + 1 > 11 ? 0 : month + 1,
+        year: month + 1 > 11 ? year + 1 : year,
+        isCurrentMonth: false,
+        isToday: false,
+        isSelected: false
+      });
+    }
+    
+    this.calendarDays.set(days);
+  }
+  
+  selectDate(day: CalendarDay): void {
+    // If selecting a day from another month, change to that month
+    if (!day.isCurrentMonth) {
+      this.currentDate.set(new Date(day.year, day.month, day.day));
+      this.generateCalendar();
+    }
+    
+    // Create new date with selected date and current time
+    const newDate = new Date(day.year, day.month, day.day);
+    newDate.setHours(parseInt(this.selectedHour()));
+    newDate.setMinutes(parseInt(this.selectedMinute()));
+    newDate.setSeconds(parseInt(this.selectedSecond()));
+    
+    this.selectedDate.set(newDate);
+    
+    // Update the selected status
+    const updatedDays = this.calendarDays().map(d => ({
+      ...d,
+      isSelected: d.day === day.day && d.month === day.month && d.year === day.year && d.isCurrentMonth
+    }));
+    
+    this.calendarDays.set(updatedDays);
+    this.emitDateTimeChange();
+  }
+  
+  selectTime(type: 'hour' | 'minute' | 'second', value: string): void {
+    if (type === 'hour') {
+      this.selectedHour.set(value);
+    } else if (type === 'minute') {
+      this.selectedMinute.set(value);
+    } else {
+      this.selectedSecond.set(value);
+    }
+    
+    // Update the selected date with new time
+    const selected = this.selectedDate();
+    selected.setHours(parseInt(this.selectedHour()));
+    selected.setMinutes(parseInt(this.selectedMinute()));
+    selected.setSeconds(parseInt(this.selectedSecond()));
+    
+    this.selectedDate.set(selected);
+    this.emitDateTimeChange();
+  }
+  
+  prevMonth(): void {
+    const current = this.currentDate();
+    this.currentDate.set(new Date(current.getFullYear(), current.getMonth() - 1, 1));
+    this.generateCalendar();
+  }
+  
+  nextMonth(): void {
+    const current = this.currentDate();
+    this.currentDate.set(new Date(current.getFullYear(), current.getMonth() + 1, 1));
+    this.generateCalendar();
+  }
+  
+  prevYear(): void {
+    const current = this.currentDate();
+    this.currentDate.set(new Date(current.getFullYear() - 1, current.getMonth(), 1));
+    this.generateCalendar();
+  }
+  
+  nextYear(): void {
+    const current = this.currentDate();
+    this.currentDate.set(new Date(current.getFullYear() + 1, current.getMonth(), 1));
+    this.generateCalendar();
+  }
+  
+  setToday(): void {
+    const now = new Date();
+    this.currentDate.set(now);
+    this.selectedDate.set(now);
+    this.selectedHour.set(now.getHours().toString().padStart(2, '0'));
+    this.selectedMinute.set(now.getMinutes().toString().padStart(2, '0'));
+    this.selectedSecond.set(now.getSeconds().toString().padStart(2, '0'));
+    this.generateCalendar();
+    this.emitDateTimeChange();
+  }
+  
+  setNow(): void {
+    const now = new Date();
+    // Keep the selected date but update the time
+    const selected = this.selectedDate();
+    selected.setHours(now.getHours());
+    selected.setMinutes(now.getMinutes());
+    selected.setSeconds(now.getSeconds());
+    
+    this.selectedDate.set(selected);
+    this.selectedHour.set(now.getHours().toString().padStart(2, '0'));
+    this.selectedMinute.set(now.getMinutes().toString().padStart(2, '0'));
+    this.selectedSecond.set(now.getSeconds().toString().padStart(2, '0'));
+    
+    this.emitDateTimeChange();
+  }
+  
+  confirmSelection(): void {
+    this.emitDateTimeChange();
+  }
+  
+  emitDateTimeChange(): void {
+    this.dateTimeChange.emit(this.selectedDate());
+  }
+}
+
+interface CalendarDay {
+  day: number;
+  month: number;
+  year: number;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  isSelected: boolean;
+}
+
+// date-time-picker.component.html
+<div class="datetime-picker">
+  <!-- Calendar Container -->
+  <div class="calendar-container">
+    <!-- Calendar Header -->
+    <div class="calendar-header">
+      <div class="month-year-selector">
+        <button type="button" class="nav-btn" (click)="prevYear()">&laquo;</button>
+        <button type="button" class="nav-btn" (click)="prevMonth()">&lsaquo;</button>
+        <div class="current-month-year">
+          {{ months[currentDate().getMonth()] }} {{ currentDate().getFullYear() }}
+        </div>
+        <button type="button" class="nav-btn" (click)="nextMonth()">&rsaquo;</button>
+        <button type="button" class="nav-btn" (click)="nextYear()">&raquo;</button>
+      </div>
+    </div>
+    
+    <!-- Calendar View -->
+    <div class="calendar-view">
+      <!-- Weekday Headers -->
+      <div class="calendar-grid">
+        <div class="weekday-header" *ngFor="let day of weekDays">
+          {{ day }}
+        </div>
+        
+        <!-- Calendar Days -->
+        <div 
+          *ngFor="let day of calendarDays()" 
+          class="calendar-day" 
+          [class.other-month]="!day.isCurrentMonth"
+          [class.today]="day.isToday"
+          [class.selected]="day.isSelected"
+          (click)="selectDate(day)"
+        >
+          {{ day.day }}
+        </div>
+      </div>
+      
+      <!-- Footer -->
+      <div class="calendar-footer">
+        <button type="button" class="today-btn" (click)="setToday()">Today</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Time Picker Container -->
+  <div class="time-container">
+    <div class="time-header">
+      Time
+    </div>
+    
+    <div class="time-selector">
+      <!-- Hour Selector -->
+      <div class="time-column">
+        <div class="time-list">
+          <div 
+            *ngFor="let hour of hours()" 
+            class="time-option"
+            [class.selected]="hour === selectedHour()"
+            (click)="selectTime('hour', hour)"
+          >
+            {{ hour }}
+          </div>
+        </div>
+      </div>
+      
+      <!-- Minute Selector -->
+      <div class="time-column">
+        <div class="time-list">
+          <div 
+            *ngFor="let minute of minutes()" 
+            class="time-option"
+            [class.selected]="minute === selectedMinute()"
+            (click)="selectTime('minute', minute)"
+          >
+            {{ minute }}
+          </div>
+        </div>
+      </div>
+      
+      <!-- Second Selector -->
+      <div class="time-column">
+        <div class="time-list">
+          <div 
+            *ngFor="let second of seconds()" 
+            class="time-option"
+            [class.selected]="second === selectedSecond()"
+            (click)="selectTime('second', second)"
+          >
+            {{ second }}
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="time-footer">
+      <button type="button" class="now-btn" (click)="setNow()">Now</button>
+    </div>
+    
+    <div class="time-footer">
+      <button type="button" class="ok-btn" (click)="confirmSelection()">OK</button>
+    </div>
+  </div>
+</div>
+
+// date-time-picker.component.scss
+.datetime-picker {
+  width: 100%;
+  display: flex;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background-color: #fff;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.calendar-container {
+  flex: 1;
+  border-right: 1px solid #eaeaea;
+  min-width: 350px;
+}
+
+.time-container {
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-header {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.month-year-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.current-month-year {
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+
+.nav-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: #666;
+  padding: 4px 8px;
+  transition: color 0.2s;
+  
+  &:hover {
+    color: #2196f3;
+  }
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  padding: 12px;
+}
+
+.weekday-header {
+  text-align: center;
+  font-weight: 500;
+  color: #666;
+  padding: 8px 0;
+}
+
+.calendar-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s;
+  
+  &:hover {
+    background-color: #f1f1f1;
+  }
+  
+  &.other-month {
+    color: #ccc;
+  }
+  
+  &.today {
+    color: #2196f3;
+    font-weight: 700;
+  }
+  
+  &.selected {
+    background-color: #2196f3;
+    color: white;
+    
+    &:hover {
+      background-color: darken(#2196f3, 10%);
+    }
+  }
+}
+
+.calendar-footer {
+  display: flex;
+  padding: 12px;
+  border-top: 1px solid #eaeaea;
+  justify-content: space-between;
+}
+
+.today-btn, .now-btn {
+  background: none;
+  border: none;
+  color: #2196f3;
+  font-weight: 500;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: 4px;
+  
+  &:hover {
+    background-color: rgba(33, 150, 243, 0.1);
+  }
+}
+
+.time-header {
+  padding: 12px;
+  text-align: center;
+  font-weight: 500;
+  color: #555;
+  background-color: #f9
